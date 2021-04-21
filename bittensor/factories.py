@@ -1,6 +1,8 @@
+import asyncio
+
 from loguru import logger
 from munch import Munch
-from numpy.random import random
+import random
 
 from bittensor.substrate import SubstrateWSInterface
 from bittensor.subtensor import Subtensor
@@ -12,32 +14,31 @@ class SubtensorEndpointFactory:
 
         self.endpoints = {
             "akira": [
-                '104.248.52.148:9944',
-                '142.93.194.110:9944',
-                '162.243.175.73:9944',
-                '165.227.92.237:9944',
-                '167.172.141.223:9944',
-                '174.138.32.166:9944',
-                '206.189.194.236:9944',
-                '68.183.130.145:9944',
-                '68.183.140.221:9944',
-                '68.183.140.251:9944'
+                'fermi.akira.bittensor.com:9944',
+                'copernicus.akira.bittensor.com:9944',
+                'buys.akira.bittensor.com:9944',
+                'nobel.akira.bittensor.com:9944',
+                'mendeleev.akira.bittensor.com:9944',
+                'rontgen.akira.bittensor.com:9944',
+                'feynman.akira.bittensor.com:9944',
+                'bunsen.akira.bittensor.com:9944',
+                'berkeley.akira.bittensor.com:9944',
+                'huygens.akira.bittensor.com:9944',
             ],
             "kusanagi": [
-                '142.93.203.149:9944',
-                '157.230.11.1:9944',
-                '157.230.11.116:9944',
-                '157.230.11.31:9944',
-                '157.230.11.36:9944',
-                '157.230.11.53:9944',
-                '157.230.3.108:9944',
-                '159.65.236.189:9944',
-                '165.227.81.42:9944',
-                '206.189.207.173:9944'
+                'fermi.kusanagi.bittensor.com:9944',
+                'copernicus.kusanagi.bittensor.com:9944',
+                'buys.kusanagi.bittensor.com:9944',
+                'nobel.kusanagi.bittensor.com:9944',
+                'mendeleev.kusanagi.bittensor.com:9944',
+                'rontgen.kusanagi.bittensor.com:9944',
+                'feynman.kusanagi.bittensor.com:9944',
+                'bunsen.kusanagi.bittensor.com:9944',
+                'berkeley.kusanagi.bittensor.com:9944',
+                'huygens.kusanagi.bittensor.com:9944',
             ],
             "boltzmann": [
                 'feynman.boltzmann.bittensor.com:9944',
-                '157.230.223.68:9944'
             ],
             "local": [
                 '127.0.0.1:9944'
@@ -79,11 +80,10 @@ class SubtensorInterfaceFactory:
         return self.__get_interface(endpoint)
 
     def get_by_network(self, network: str):
-        blacklist = []
         interface = None
 
         while interface is None:
-            endpoint = self.__endpoint_factory.get(network=network, blacklist=blacklist)
+            endpoint = self.__endpoint_factory.get(network=network, blacklist=self.__attempted_endpoints)
             if endpoint is None:
                 # We have exhausted the list of available endpoint, break away
                 self.__display_no_more_endpoints_message(network)
@@ -93,8 +93,8 @@ class SubtensorInterfaceFactory:
                 self.__attempted_endpoints.append(endpoint)
                 interface = self.__get_interface(endpoint)
 
-            # At this point, all endpoints have been tested, and we have a valid, connected interface
-            return interface
+        # At this point, all endpoints have been tested, and we have a valid, connected interface
+        return interface
 
 
     def __get_interface(self, endpoint):
@@ -104,7 +104,10 @@ class SubtensorInterfaceFactory:
             type_registry=self.__custom_type_registry,
         )
 
-        if await interface.async_connect(endpoint, timeout=5):
+        loop = asyncio.get_event_loop()
+        loop.set_debug(enabled=True)
+
+        if loop.run_until_complete(interface.async_connect(endpoint, timeout=5)):
             self.__display_success_message(endpoint)
             return interface
         else:  # Timeout occured

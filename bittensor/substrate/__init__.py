@@ -293,6 +293,8 @@ class SubtensorClientProtocol(WebSocketClientProtocol):
         """
         logger.trace("Connected. {}", response)
 
+        logger.error("CONNECTED")
+
     def onOpen(self):
         r""" Callback fired when the initial WebSocket opening handshake was completed. 
             You now can send and receive WebSocket messages.
