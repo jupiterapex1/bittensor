@@ -4,6 +4,7 @@ from loguru import logger
 from munch import Munch
 import random
 
+from bittensor.observers import SubtensorInterfaceObserver
 from bittensor.substrate import SubstrateWSInterface
 from bittensor.subtensor import Subtensor
 
@@ -77,7 +78,11 @@ class SubtensorInterfaceFactory:
 
 
     def get_by_endpoint(self, endpoint : str):
-        return self.__get_interface(endpoint)
+        interface =  self.__get_interface(endpoint)
+
+        # We're not attaching an observer here, because a single endpoint does not have an alternative
+        # To reconnect to
+        return interface
 
     def get_by_network(self, network: str):
         interface = None
@@ -94,7 +99,14 @@ class SubtensorInterfaceFactory:
                 interface = self.__get_interface(endpoint)
 
         # At this point, all endpoints have been tested, and we have a valid, connected interface
+        # Attach an observer that is able to detect disconnections and init a new connection
+        self.__attach_observer(interface, network)
+
         return interface
+
+    def __attach_observer(self, interface : SubstrateWSInterface, network : str):
+        observer = SubtensorInterfaceObserver(self, network)
+        interface.add_observer(observer)
 
 
     def __get_interface(self, endpoint):
@@ -144,24 +156,35 @@ class SubtensorClientFactory:
     def __init__(self, interface_factory: SubtensorInterfaceFactory):
         self.__interface_factory = interface_factory
 
-    def get_for_config(self, config : 'Munch'):
+    def create_by_config(self, config : 'Munch'):
         if config.subtensor.chain_endpoint:
-            return self.get_for_endpoint(config.subtensor.chain_endpoint)
+            return self.create_by_endpoint(config.subtensor.chain_endpoint)
         elif config.subtensor.network:
-            return self.get_for_network(config.subtensor.network)
+            return self.create_by_network(config.subtensor.network)
         else:
             logger.error("[!] Invalid subtensor config. chain_endpoint and network not defined")
             return None
 
-    def get_for_network(self, network: str):
-        return self.__interface_factory.get_by_network(network)
+    def create_by_network(self, network: str):
+        interface =  self.__interface_factory.get_by_network(network)
+        return self.__build_client(interface)
 
-    def get_for_endpoint(self, endpoint: str):
-        return self.__interface_factory.get_by_endpoint(endpoint)
+    def create_by_endpoint(self, endpoint: str):
+        interface =  self.__interface_factory.get_by_endpoint(endpoint)
+        return self.__build_client(interface)
 
-    def get_default(self):
+    def create_default(self):
         config = Subtensor.default_config()
-        return self.get_for_config(config)
+        return self.create_by_config(config)
+
+
+
+
+    def __build_client(self, interface : SubstrateWSInterface):
+        client = Subtensor(interface)
+        interface.set_client(client)
+        return client
+
 
 
 

@@ -19,7 +19,6 @@ import asyncio
 from hashlib import blake2b
 import binascii
 import json, yaml
-from typing import List, Optional, Tuple
 from loguru import logger
 import re
 
@@ -32,6 +31,7 @@ from scalecodec.metadata import MetadataDecoder
 from scalecodec.type_registry import load_type_registry_preset
 from scalecodec.updater import update_type_registries
 
+from bittensor.observers import Observer
 from .key import extract_derive_path
 from .subkey import Subkey
 from .utils.hasher import blake2_256, two_x64_concat, xxh128, blake2_128, blake2_128_concat, identity
@@ -42,6 +42,9 @@ from .utils.ss58 import ss58_decode, ss58_encode
 from bip39 import bip39_to_mini_secret, bip39_generate
 import sr25519
 import ed25519
+
+# from ..subtensor import Subtensor
+
 
 class KeypairType:
     ED25519 = 0
@@ -258,202 +261,27 @@ def KeypairRepresenter(dumper, data):
     return dumper.represent_scalar('Keypair', serializedData)
 yaml.add_representer(Keypair, KeypairRepresenter)
 
-class SubtensorClientProtocol(WebSocketClientProtocol):
 
-    def __init__(self):
-        WebSocketClientProtocol.__init__(self)
 
-        # Create message state memory.
-        self._next_message_id = 0
-        self._futures = {}
-        self._handlers = {}     
-        self._is_subscription = {}
-        self._id_for_subscription = {}
 
-        # Create connection future.
-        loop = asyncio.get_event_loop()
-        self.is_connected = loop.create_future()
 
-    def onConnecting(self, transport_details):
-        r""" This method is called when we’ve connected, but before the handshake is done.
-            transport_details (autobahn.websocket.types.TransportDetails):
-                 information about the transport.
-        """
-        logger.trace("Connecting to websocket server {}", transport_details)
 
-    def onConnect(self, response):
-        r""" Callback fired during WebSocket opening handshake when a client connects 
-        (to a server with request from client) or when server connection established 
-        (by a client with response from server). This method may run asynchronous code.
 
-            Args:
-                response ( autobahn.websocket.types.ConnectionRequest):
-                    Connection response from server.
 
-        """
-        logger.trace("Connected. {}", response)
 
-        logger.error("CONNECTED")
 
-    def onOpen(self):
-        r""" Callback fired when the initial WebSocket opening handshake was completed. 
-            You now can send and receive WebSocket messages.
-        """
-        logger.trace("Connection open to websocket established")
-        self.is_connected.set_result( True )
 
-    def onClose(self, wasClean, code, reason):
-        r""" Callback fired when the WebSocket connection has been closed (
-            WebSocket closing handshake has been finished or the connection was closed uncleanly).
-            Args:
-                wasClean (bool)
-                    True iff the WebSocket connection was closed cleanly
-                code (int or None):
-                    Close status code as sent by the WebSocket peer.
-                reason (str or None):
-                    Close reason as sent by the WebSocket peer.
-        """
 
-        logger.trace("Connection closed.")
-        self.is_connected.set_result( False )
 
-    def onMessage(self, payload, isBinary):
-        r""" Callback fired when a complete WebSocket message was received.
-            Args:
-                payload (str):
-                    The WebSocket message received.
-                isBinary (bool):
-                    Flag indicating whether payload is binary or UTF-8 encoded text.             
-        """
-        # 1. Load json message.
-        json_data = json.loads(payload)
-        logger.trace(json_data)
 
-        # Message id is passed by initial responses.
-        message_id = None
-        # A subscription key can be retrieved if the message has no id but contains a ['params']['subscription'] field.
-        is_subscription = False
-
-        # 2. Get message id if it exists.
-        if 'id' in json_data:
-            message_id = int(json_data['id']) 
-
-        # 3. Fall back to check if the message is a subscription.
-        # Checks for the ['params']['subscription'] field.
-        elif 'params' in json_data:
-            if 'subscription' in json_data['params']:
-                subscription = json_data['params']['subscription']
-                if subscription in self._id_for_subscription:
-                    message_id = self._id_for_subscription[ subscription ]     
-                    is_subscription = True 
-
-        # 4. Messages without an id are returned without processing.
-        # Note that on subscription we attain the message_id from the self._id_for_subscription mem.
-        if message_id == None:
-            return
-        logger.trace('recieved message with id {}', message_id)
-
-        # 5. The first message of a subscription contains the subscription key.
-        # We check the self._is_subscrtiption to see if we are watching this stream.
-        if message_id in self._is_subscription and not is_subscription:
-            if self._is_subscription [ message_id ] == True:
-                if 'result' in json_data:
-                    subscription_id = json_data[ 'result' ]
-                    self._id_for_subscription[ subscription_id ] = message_id
-            
-        # 6. Handle the message with the passed handler. By default the handler is none
-        # and we simply pass through the message. If a handler is present it must return a 
-        # non null result.
-        if message_id not in self._handlers:
-            return
-        result_handler = self._handlers[ message_id ]
-        if result_handler == None:
-            handler_result = json_data
-        else:
-            handler_result = result_handler( json_data )
-
-        # 7. Check handler has result is non-none. The non-none result specifies the end of the 
-        # subscription.
-        if handler_result == None:
-            logger.trace('handler produced non-result')
-            return 
-
-        # 8. Sanity check.
-        if message_id not in self._futures:
-            logger.trace('no future for message')
-            return
-        
-        # 9. Set result and event.
-        self._futures[ message_id ].set_result( handler_result )
-
-    def sendMessage(self, payload, isBinary=False, fragmentSize=None, sync=False, doNotCompress=False):
-        r""" Send a WebSocket message over the connection to the peer.
-            Args:
-                payload (str or binary):
-                    encoded payload.            
-                isBinary (bool):
-                    Flag indicating whether payload is binary or UTF-8 encoded text.
-        """
-        logger.trace("Sending message: {}", payload)
-        super().sendMessage(payload, isBinary, fragmentSize, sync, doNotCompress)
-
-    async def async_rpc_request( self, method, params, result_handler = None, is_subscription = False, timeout = 10 ) -> dict:
-        r""" Creates a websocket message and waits until the response is recieved.
-            Maintains memory about the sent request and only returns when the passed handler produces a
-            non-null response or a timeout occurs. The call is blocking.
-            Args:
-                method (str):
-                    method of the JSONRPC request
-                params (str):
-                    a list containing the parameters of the JSONRPC request                
-                result_handler (function):
-                    optional callback which returns a value when the message is complete. Or none otherwise.
-                is_subscription (bool):
-                    if true the messsage is a subscription. We link all messages with the same subscription key.
-                timeout (int):
-                    How long this call waits until a successful response is logged.
-        Returns:
-            response (dict):
-                Json data as a python dictionary or None if the call reaches a timeout. 
-        """
-        # Get and update the message id.
-        current_message_id = self._next_message_id 
-        self._next_message_id += 1
-
-        # Send the message.
-        payload = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": current_message_id
-        }
-        self.sendMessage( json.dumps(payload).encode('utf8') )
-
-        # Create future
-        loop = asyncio.get_event_loop()
-        message_future = loop.create_future()
-        self._futures[ current_message_id ] = message_future
-
-        # Set handlers and subscriptions.
-        self._handlers[ current_message_id  ] = result_handler
-        self._is_subscription [ current_message_id  ] = is_subscription
-
-        # Wait for events.
-        try:
-            response = await asyncio.wait_for( message_future, timeout = timeout )
-        except asyncio.TimeoutError:
-            response = None
-        
-        # Delete lingering memory
-        del self._futures[ current_message_id  ]
-        del self._handlers[ current_message_id  ]
-        del self._is_subscription [ current_message_id  ]
-        if current_message_id in self._id_for_subscription:
-            del self._id_for_subscription [ current_message_id  ]
-        return response
 
 class SubstrateWSInterface:
+
     def __init__(self, address_type=None, type_registry=None, type_registry_preset="default", cache_region=None, sub_key: Subkey = None):
+        self.factory = None
+        self.protocol = None
+        self.cache_region = cache_region
+
         """
          A specialized class in interfacing with a Substrate node.
 
@@ -465,10 +293,6 @@ class SubstrateWSInterface:
          type_registry_preset: The name of the predefined type registry shipped with the SCALE-codec, e.g. kusama
          cache_region: a Dogpile cache region as a central store for the metadata cache
          """
-        self.factory = None
-        self.protocol = None
-        self.cache_region = cache_region
-
         if type_registry_preset:
             # Load type registries in runtime configuration
             RuntimeConfiguration().update_type_registry(load_type_registry_preset("default"))
@@ -496,6 +320,24 @@ class SubstrateWSInterface:
         self.sub_key = sub_key
         self.debug = False
         self.nonce = {} # Map from pubkey to nonce
+        self._observers = []
+        self._client = None
+
+    def add_observer(self, observer : Observer):
+        self._observers.append(observer)
+
+
+    def set_client(self, subtensor_client):
+        self._client = subtensor_client
+
+    def get_client(self):
+        return self._client
+
+
+    def notify_observers(self):
+        for observer in self._observers:
+            observer.notify(self)
+
 
     async def async_connect(self, url: str, timeout: int = 3) -> bool:
         r""" Connects the protocol to the passed url waits of a connection future.
@@ -519,6 +361,7 @@ class SubstrateWSInterface:
 
         try:
             _, self.protocol = await loop.create_connection(self.factory, host, port)
+            self.protocol.set_interface(self)
         except:
             return False
 
@@ -2206,3 +2049,205 @@ class SubstrateWSInterface:
         logger.trace(message)
 
 
+class SubtensorClientProtocol(WebSocketClientProtocol):
+
+    def __init__(self):
+        WebSocketClientProtocol.__init__(self)
+
+        # Create message state memory.
+        self._next_message_id = 0
+        self._futures = {}
+        self._handlers = {}
+        self._is_subscription = {}
+        self._id_for_subscription = {}
+        self._interface = None
+
+        # Create connection future.
+        loop = asyncio.get_event_loop()
+        self.is_connected = loop.create_future()
+
+
+    def set_interface(self, interface : SubstrateWSInterface):
+        self._interface = interface
+
+
+    def onConnecting(self, transport_details):
+        r""" This method is called when we’ve connected, but before the handshake is done.
+            transport_details (autobahn.websocket.types.TransportDetails):
+                 information about the transport.
+        """
+        logger.trace("Connecting to websocket server {}", transport_details)
+
+    def onConnect(self, response):
+        r""" Callback fired during WebSocket opening handshake when a client connects
+        (to a server with request from client) or when server connection established
+        (by a client with response from server). This method may run asynchronous code.
+
+            Args:
+                response ( autobahn.websocket.types.ConnectionRequest):
+                    Connection response from server.
+
+        """
+        logger.trace("Connected. {}", response)
+
+    def onOpen(self):
+        r""" Callback fired when the initial WebSocket opening handshake was completed.
+            You now can send and receive WebSocket messages.
+        """
+        logger.trace("Connection open to websocket established")
+        self.is_connected.set_result(True)
+
+    def onClose(self, wasClean, code, reason):
+        r""" Callback fired when the WebSocket connection has been closed (
+            WebSocket closing handshake has been finished or the connection was closed uncleanly).
+            Args:
+                wasClean (bool)
+                    True iff the WebSocket connection was closed cleanly
+                code (int or None):
+                    Close status code as sent by the WebSocket peer.
+                reason (str or None):
+                    Close reason as sent by the WebSocket peer.
+        """
+
+        logger.trace("Connection closed.")
+
+        logger.error("Bork")
+        self.is_connected.set_result(False)
+        self._interface.notify_observers()
+
+    def onMessage(self, payload, isBinary):
+        r""" Callback fired when a complete WebSocket message was received.
+            Args:
+                payload (str):
+                    The WebSocket message received.
+                isBinary (bool):
+                    Flag indicating whether payload is binary or UTF-8 encoded text.
+        """
+        # 1. Load json message.
+        json_data = json.loads(payload)
+        logger.trace(json_data)
+
+        # Message id is passed by initial responses.
+        message_id = None
+        # A subscription key can be retrieved if the message has no id but contains a ['params']['subscription'] field.
+        is_subscription = False
+
+        # 2. Get message id if it exists.
+        if 'id' in json_data:
+            message_id = int(json_data['id'])
+
+            # 3. Fall back to check if the message is a subscription.
+        # Checks for the ['params']['subscription'] field.
+        elif 'params' in json_data:
+            if 'subscription' in json_data['params']:
+                subscription = json_data['params']['subscription']
+                if subscription in self._id_for_subscription:
+                    message_id = self._id_for_subscription[subscription]
+                    is_subscription = True
+
+                    # 4. Messages without an id are returned without processing.
+        # Note that on subscription we attain the message_id from the self._id_for_subscription mem.
+        if message_id == None:
+            return
+        logger.trace('recieved message with id {}', message_id)
+
+        # 5. The first message of a subscription contains the subscription key.
+        # We check the self._is_subscrtiption to see if we are watching this stream.
+        if message_id in self._is_subscription and not is_subscription:
+            if self._is_subscription[message_id] == True:
+                if 'result' in json_data:
+                    subscription_id = json_data['result']
+                    self._id_for_subscription[subscription_id] = message_id
+
+        # 6. Handle the message with the passed handler. By default the handler is none
+        # and we simply pass through the message. If a handler is present it must return a
+        # non null result.
+        if message_id not in self._handlers:
+            return
+        result_handler = self._handlers[message_id]
+        if result_handler == None:
+            handler_result = json_data
+        else:
+            handler_result = result_handler(json_data)
+
+        # 7. Check handler has result is non-none. The non-none result specifies the end of the
+        # subscription.
+        if handler_result == None:
+            logger.trace('handler produced non-result')
+            return
+
+            # 8. Sanity check.
+        if message_id not in self._futures:
+            logger.trace('no future for message')
+            return
+
+        # 9. Set result and event.
+        self._futures[message_id].set_result(handler_result)
+
+
+
+    def sendMessage(self, payload, isBinary=False, fragmentSize=None, sync=False, doNotCompress=False):
+        r""" Send a WebSocket message over the connection to the peer.
+            Args:
+                payload (str or binary):
+                    encoded payload.
+                isBinary (bool):
+                    Flag indicating whether payload is binary or UTF-8 encoded text.
+        """
+        logger.trace("Sending message: {}", payload)
+        super().sendMessage(payload, isBinary, fragmentSize, sync, doNotCompress)
+
+    async def async_rpc_request(self, method, params, result_handler=None, is_subscription=False, timeout=10) -> dict:
+        r""" Creates a websocket message and waits until the response is recieved.
+            Maintains memory about the sent request and only returns when the passed handler produces a
+            non-null response or a timeout occurs. The call is blocking.
+            Args:
+                method (str):
+                    method of the JSONRPC request
+                params (str):
+                    a list containing the parameters of the JSONRPC request
+                result_handler (function):
+                    optional callback which returns a value when the message is complete. Or none otherwise.
+                is_subscription (bool):
+                    if true the messsage is a subscription. We link all messages with the same subscription key.
+                timeout (int):
+                    How long this call waits until a successful response is logged.
+        Returns:
+            response (dict):
+                Json data as a python dictionary or None if the call reaches a timeout.
+        """
+        # Get and update the message id.
+        current_message_id = self._next_message_id
+        self._next_message_id += 1
+
+        # Send the message.
+        payload = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": current_message_id
+        }
+        self.sendMessage(json.dumps(payload).encode('utf8'))
+
+        # Create future
+        loop = asyncio.get_event_loop()
+        message_future = loop.create_future()
+        self._futures[current_message_id] = message_future
+
+        # Set handlers and subscriptions.
+        self._handlers[current_message_id] = result_handler
+        self._is_subscription[current_message_id] = is_subscription
+
+        # Wait for events.
+        try:
+            response = await asyncio.wait_for(message_future, timeout=timeout)
+        except asyncio.TimeoutError:
+            response = None
+
+        # Delete lingering memory
+        del self._futures[current_message_id]
+        del self._handlers[current_message_id]
+        del self._is_subscription[current_message_id]
+        if current_message_id in self._id_for_subscription:
+            del self._id_for_subscription[current_message_id]
+        return response

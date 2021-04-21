@@ -47,7 +47,7 @@ class Subtensor:
     # }
 
     def __init__(self, interface : SubstrateWSInterface):
-        self.__interface = interface
+        self.interface = interface
 
     # def __init__(
     #         self,
@@ -172,7 +172,7 @@ class Subtensor:
             success (bool):
                 True is the websocket is connected to the chain endpoint.
         """
-        return await self.__interface.async_is_connected()
+        return await self.interface.async_is_connected()
 
     def check_connection(self) -> bool:
         r""" Checks if substrate websocket backend is connected, connects if it is not. 
@@ -242,7 +242,7 @@ To run a local node (See: docs/running_a_validator.md) \n
             attempted_endpoints.append(ws_chain_endpoint)
 
             # --- Attempt connection ----
-            if await self.__interface.async_connect( ws_chain_endpoint, timeout = 5 ):
+            if await self.interface.async_connect(ws_chain_endpoint, timeout = 5):
                 logger.log('USER-SUCCESS', "Successfully connected to endpoint: {}".format(ws_chain_endpoint))
                 return True
             
@@ -283,7 +283,7 @@ To run a local node (See: docs/running_a_validator.md) \n
         """
         # Send extrinsic
         try:
-            response = await self.__interface.submit_extrinsic(
+            response = await self.interface.submit_extrinsic(
                                     extrinsic, 
                                     wait_for_inclusion = wait_for_inclusion,
                                     wait_for_finalization = wait_for_finalization, 
@@ -441,13 +441,13 @@ To run a local node (See: docs/running_a_validator.md) \n
             'modality': modality,
             'coldkey': wallet.coldkeypub,
         }
-        call = await self.__interface.compose_call(
+        call = await self.interface.compose_call(
             call_module='SubtensorModule',
             call_function='subscribe',
             call_params=params
         )
         # TODO (const): hotkey should be an argument here not assumed. Either that or the coldkey pub should also be assumed.
-        extrinsic = await self.__interface.create_signed_extrinsic(call = call, keypair = wallet.hotkey )
+        extrinsic = await self.interface.create_signed_extrinsic(call = call, keypair = wallet.hotkey)
         result = await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
         if result:
             logger.log('USER-SUCCESS', "Successfully subscribed with [ip: {}, port: {}, modality: {}, hotkey:{}, coldkey: {}]".format(ip, port, modality, wallet.hotkey.public_key, wallet.coldkeypub ))
@@ -521,7 +521,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.__interface.compose_call(
+        call = await self.interface.compose_call(
             call_module='SubtensorModule',
             call_function='add_stake',
             call_params={
@@ -529,7 +529,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 'ammount_staked': amount.rao
             }
         )
-        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
+        extrinsic = await self.interface.create_signed_extrinsic(call = call, keypair = wallet.coldkey)
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def transfer(
@@ -597,7 +597,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.__interface.compose_call(
+        call = await self.interface.compose_call(
             call_module='Balances',
             call_function='transfer',
             call_params={
@@ -605,7 +605,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 'value': amount.rao
             }
         )
-        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
+        extrinsic = await self.interface.create_signed_extrinsic(call = call, keypair = wallet.coldkey)
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def unstake(
@@ -673,12 +673,12 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.__interface.compose_call(
+        call = await self.interface.compose_call(
             call_module='SubtensorModule',
             call_function='remove_stake',
             call_params={'ammount_unstaked': amount.rao, 'hotkey': hotkey_id}
         )
-        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
+        extrinsic = await self.interface.create_signed_extrinsic(call = call, keypair = wallet.coldkey)
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def set_weights(
@@ -746,12 +746,12 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.__interface.compose_call(
+        call = await self.interface.compose_call(
             call_module='SubtensorModule',
             call_function='set_weights',
             call_params = {'dests': destinations, 'weights': values}
         )
-        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.hotkey )
+        extrinsic = await self.interface.create_signed_extrinsic(call = call, keypair = wallet.hotkey)
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def get_balance(self, address: str) -> Balance:
@@ -777,7 +777,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 account balance
         """
         await self.async_check_connection()
-        result = await self.__interface.get_runtime_state(
+        result = await self.interface.get_runtime_state(
             module='System',
             storage_function='Account',
             params=[address],
@@ -806,7 +806,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Current chain blocknumber.
         """
         await self.async_check_connection()
-        return await self.__interface.async_get_block_number(None)
+        return await self.interface.async_get_block_number(None)
 
     def get_active(self) -> List[Tuple[str, int]]:
         r""" Returns a list of (public key, uid) pairs one for each active peer on chain.
@@ -825,7 +825,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of active peers.
         """
         await self.async_check_connection()
-        result = await self.__interface.iterate_map(
+        result = await self.interface.iterate_map(
             module='SubtensorModule',
             storage_function='Active',
         )
@@ -848,7 +848,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of stake values.
         """
         await self.async_check_connection()
-        result = await self.__interface.iterate_map(
+        result = await self.interface.iterate_map(
             module='SubtensorModule',
             storage_function='Stake',
         )
@@ -871,7 +871,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of last emit values.
         """
         await self.async_check_connection()
-        result = await self.__interface.iterate_map(
+        result = await self.interface.iterate_map(
             module='SubtensorModule',
             storage_function='LastEmit'
         )
@@ -894,7 +894,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of weight val pairs.
         """
         await self.async_check_connection()
-        result = await self.__interface.iterate_map(
+        result = await self.interface.iterate_map(
             module='SubtensorModule',
             storage_function='WeightVals'
         )
@@ -917,7 +917,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of weight uid pairs
         """
         await self.async_check_connection()
-        result = await self.__interface.iterate_map(
+        result = await self.interface.iterate_map(
             module='SubtensorModule',
             storage_function='WeightUids'
         )
@@ -940,7 +940,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of neuron objects.
         """
         await self.async_check_connection()
-        neurons = await self.__interface.iterate_map(
+        neurons = await self.interface.iterate_map(
             module='SubtensorModule',
             storage_function='Neurons'
         )
@@ -969,7 +969,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 uid of peer with hotkey equal to passed public key.
         """
         await self.async_check_connection()
-        result = await self.__interface.get_runtime_state(
+        result = await self.interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='Active',
             params=[pubkey]
@@ -1001,7 +1001,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Dict in list form containing metadata of associated uid.
         """
         await self.async_check_connection()
-        result = await self.__interface.get_runtime_state(
+        result = await self.interface.get_runtime_state(
                 module='SubtensorModule',
                 storage_function='Neurons',
                 params=[uid]
@@ -1031,7 +1031,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Amount of staked token.
         """
         await self.async_check_connection()
-        stake = await self.__interface.get_runtime_state(
+        stake = await self.interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='Stake',
             params = [uid]
@@ -1064,7 +1064,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Weight uids for passed uid.
         """
         await self.async_check_connection()
-        result = await self.__interface.get_runtime_state(
+        result = await self.interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='WeightUids',
             params = [uid]
@@ -1094,7 +1094,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Weight vals for passed uid.
         """
         await self.async_check_connection()
-        result = await self.__interface.get_runtime_state(
+        result = await self.interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='WeightVals',
             params = [uid]
@@ -1124,7 +1124,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Last emit block numebr
         """
         await self.async_check_connection()
-        result = await self.__interface.get_runtime_state(
+        result = await self.interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='LastEmit',
             params = [uid]
