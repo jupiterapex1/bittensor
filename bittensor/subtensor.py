@@ -36,54 +36,57 @@ class Subtensor:
     """
     Handles interactions with the subtensor chain.
     """
-    custom_type_registry = {
-        "runtime_id": 2,
-        "types": {
-            "NeuronMetadataOf": {
-                "type": "struct",
-                "type_mapping": [["ip", "u128"], ["port", "u16"], ["ip_type", "u8"], ["uid", "u64"], ["modality", "u8"], ["hotkey", "AccountId"], ["coldkey", "AccountId"]]
-            }
-        }
-    }
+    # custom_type_registry = {
+    #     "runtime_id": 2,
+    #     "types": {
+    #         "NeuronMetadataOf": {
+    #             "type": "struct",
+    #             "type_mapping": [["ip", "u128"], ["port", "u16"], ["ip_type", "u8"], ["uid", "u64"], ["modality", "u8"], ["hotkey", "AccountId"], ["coldkey", "AccountId"]]
+    #         }
+    #     }
+    # }
 
-    def __init__(
-            self, 
-            config: 'Munch' = None,
-            network: str = None,
-            chain_endpoint: str = None
-        ):
-        r""" Initializes a subtensor chain interface.
-            Args:
-                config (:obj:`Munch`, `optional`): 
-                    metagraph.Metagraph.config()
-                network (default='akira', type=str)
-                    The subtensor network flag. The likely choices are:
-                            -- akira (testing network)
-                            -- kusanagi (main network)
-                    If this option is set it overloads subtensor.chain_endpoint with 
-                    an entry point node from that network.
-                chain_endpoint (default=None, type=str)
-                    The subtensor endpoint flag. If set, overrides the --network flag.
-        """
-        if config == None:
-            config = Subtensor.default_config()
-        config.subtensor.network = network if network != None else config.subtensor.network
-        config.subtensor.chain_endpoint = chain_endpoint if chain_endpoint != None else config.subtensor.chain_endpoint
-        Subtensor.check_config(config)
-        self.config = copy.deepcopy(config)
+    def __init__(self, interface : SubstrateWSInterface):
+        self.__interface = interface
 
-        self.substrate = SubstrateWSInterface(
-            address_type = 42,
-            type_registry_preset='substrate-node-template',
-            type_registry=self.custom_type_registry,
-        )
+    # def __init__(
+    #         self,
+    #         config: 'Munch' = None,
+    #         network: str = None,
+    #         chain_endpoint: str = None
+    #     ):
+    #     r""" Initializes a subtensor chain interface.
+    #         Args:
+    #             config (:obj:`Munch`, `optional`):
+    #                 metagraph.Metagraph.config()
+    #             network (default='akira', type=str)
+    #                 The subtensor network flag. The likely choices are:
+    #                         -- akira (testing network)
+    #                         -- kusanagi (main network)
+    #                 If this option is set it overloads subtensor.chain_endpoint with
+    #                 an entry point node from that network.
+    #             chain_endpoint (default=None, type=str)
+    #                 The subtensor endpoint flag. If set, overrides the --network flag.
+    #     """
+    #     if config == None:
+    #         config = Subtensor.default_config()
+    #     config.subtensor.network = network if network != None else config.subtensor.network
+    #     config.subtensor.chain_endpoint = chain_endpoint if chain_endpoint != None else config.subtensor.chain_endpoint
+    #     Subtensor.check_config(config)
+    #     self.config = copy.deepcopy(config)
+    #
+    #     self.substrate = SubstrateWSInterface(
+    #         address_type = 42,
+    #         type_registry_preset='substrate-node-template',
+    #         type_registry=self.custom_type_registry,
+    #     )
 
     @staticmethod
     def default_config() -> Munch:
         # Parses and returns a config Munch for this object.
-        parser = argparse.ArgumentParser(); 
+        parser = argparse.ArgumentParser();
         Subtensor.add_args(parser) 
-        config = bittensor.config.Config.to_config(parser); 
+        config = bittensor.config.Config.to_config(parser)
         return config
     
     @staticmethod   
@@ -106,52 +109,52 @@ class Subtensor:
     def check_config(config: Munch):
         pass
 
-    def endpoint_for_network( self, blacklist: List[str] = [] ) -> str:
-        r""" Returns a chain endpoint based on config.subtensor.network.
-            Returns None if there are no available endpoints.
-        Raises:
-            endpoint (str):
-                Websocket endpoint or None if there are none available.
-        """
-
-        # Chain endpoint overrides the --network flag.
-        if self.config.subtensor.chain_endpoint != None:
-            if self.config.subtensor.chain_endpoint in blacklist:
-                return None
-            else:
-                return self.config.subtensor.chain_endpoint
-
-        # Else defaults to networks.
-        # TODO(const): this should probably make a DNS lookup.
-        if self.config.subtensor.network == "akira":
-            akira_available = [item for item in bittensor.__akira_entrypoints__ if item not in blacklist ]
-            if len(akira_available) == 0:
-                return None
-            return random.choice( akira_available )
-
-        elif self.config.subtensor.network == "boltzmann":
-            boltzmann_available = [item for item in bittensor.__boltzmann_entrypoints__ if item not in blacklist ]
-            if len(boltzmann_available) == 0:
-                return None
-            return random.choice( boltzmann_available )
-
-        elif self.config.subtensor.network == "kusanagi":
-            kusanagi_available = [item for item in bittensor.__kusanagi_entrypoints__ if item not in blacklist ]
-            if len(kusanagi_available) == 0:
-                return None
-            return random.choice( kusanagi_available )
-
-        elif self.config.subtensor.network == "local":
-            local_available = [item for item in bittensor.__local_entrypoints__ if item not in blacklist ]
-            if len(local_available) == 0:
-                return None
-            return random.choice( local_available )
-            
-        else:
-            akira_available = [item for item in bittensor.__akira_entrypoints__ if item not in blacklist ]
-            if len(akira_available) == 0:
-                return None
-            return random.choice( akira_available )
+    # def endpoint_for_network( self, blacklist: List[str] = [] ) -> str:
+    #     r""" Returns a chain endpoint based on config.subtensor.network.
+    #         Returns None if there are no available endpoints.
+    #     Raises:
+    #         endpoint (str):
+    #             Websocket endpoint or None if there are none available.
+    #     """
+    #
+    #     # Chain endpoint overrides the --network flag.
+    #     if self.config.subtensor.chain_endpoint != None:
+    #         if self.config.subtensor.chain_endpoint in blacklist:
+    #             return None
+    #         else:
+    #             return self.config.subtensor.chain_endpoint
+    #
+    #     # Else defaults to networks.
+    #     # TODO(const): this should probably make a DNS lookup.
+    #     if self.config.subtensor.network == "akira":
+    #         akira_available = [item for item in bittensor.__akira_entrypoints__ if item not in blacklist ]
+    #         if len(akira_available) == 0:
+    #             return None
+    #         return random.choice( akira_available )
+    #
+    #     elif self.config.subtensor.network == "boltzmann":
+    #         boltzmann_available = [item for item in bittensor.__boltzmann_entrypoints__ if item not in blacklist ]
+    #         if len(boltzmann_available) == 0:
+    #             return None
+    #         return random.choice( boltzmann_available )
+    #
+    #     elif self.config.subtensor.network == "kusanagi":
+    #         kusanagi_available = [item for item in bittensor.__kusanagi_entrypoints__ if item not in blacklist ]
+    #         if len(kusanagi_available) == 0:
+    #             return None
+    #         return random.choice( kusanagi_available )
+    #
+    #     elif self.config.subtensor.network == "local":
+    #         local_available = [item for item in bittensor.__local_entrypoints__ if item not in blacklist ]
+    #         if len(local_available) == 0:
+    #             return None
+    #         return random.choice( local_available )
+    #
+    #     else:
+    #         akira_available = [item for item in bittensor.__akira_entrypoints__ if item not in blacklist ]
+    #         if len(akira_available) == 0:
+    #             return None
+    #         return random.choice( akira_available )
 
     def is_connected(self) -> bool:
         r""" Returns true if the connection state as a boolean.
@@ -169,7 +172,7 @@ class Subtensor:
             success (bool):
                 True is the websocket is connected to the chain endpoint.
         """
-        return await self.substrate.async_is_connected()
+        return await self.__interface.async_is_connected()
 
     def check_connection(self) -> bool:
         r""" Checks if substrate websocket backend is connected, connects if it is not. 
@@ -239,7 +242,7 @@ To run a local node (See: docs/running_a_validator.md) \n
             attempted_endpoints.append(ws_chain_endpoint)
 
             # --- Attempt connection ----
-            if await self.substrate.async_connect( ws_chain_endpoint, timeout = 5 ):
+            if await self.__interface.async_connect( ws_chain_endpoint, timeout = 5 ):
                 logger.log('USER-SUCCESS', "Successfully connected to endpoint: {}".format(ws_chain_endpoint))
                 return True
             
@@ -280,7 +283,7 @@ To run a local node (See: docs/running_a_validator.md) \n
         """
         # Send extrinsic
         try:
-            response = await self.substrate.submit_extrinsic( 
+            response = await self.__interface.submit_extrinsic(
                                     extrinsic, 
                                     wait_for_inclusion = wait_for_inclusion,
                                     wait_for_finalization = wait_for_finalization, 
@@ -438,13 +441,13 @@ To run a local node (See: docs/running_a_validator.md) \n
             'modality': modality,
             'coldkey': wallet.coldkeypub,
         }
-        call = await self.substrate.compose_call(
+        call = await self.__interface.compose_call(
             call_module='SubtensorModule',
             call_function='subscribe',
             call_params=params
         )
         # TODO (const): hotkey should be an argument here not assumed. Either that or the coldkey pub should also be assumed.
-        extrinsic = await self.substrate.create_signed_extrinsic(call = call, keypair = wallet.hotkey )
+        extrinsic = await self.__interface.create_signed_extrinsic(call = call, keypair = wallet.hotkey )
         result = await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
         if result:
             logger.log('USER-SUCCESS', "Successfully subscribed with [ip: {}, port: {}, modality: {}, hotkey:{}, coldkey: {}]".format(ip, port, modality, wallet.hotkey.public_key, wallet.coldkeypub ))
@@ -518,7 +521,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.substrate.compose_call(
+        call = await self.__interface.compose_call(
             call_module='SubtensorModule',
             call_function='add_stake',
             call_params={
@@ -526,7 +529,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 'ammount_staked': amount.rao
             }
         )
-        extrinsic = await self.substrate.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
+        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def transfer(
@@ -594,7 +597,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.substrate.compose_call(
+        call = await self.__interface.compose_call(
             call_module='Balances',
             call_function='transfer',
             call_params={
@@ -602,7 +605,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 'value': amount.rao
             }
         )
-        extrinsic = await self.substrate.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
+        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def unstake(
@@ -670,12 +673,12 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.substrate.compose_call(
+        call = await self.__interface.compose_call(
             call_module='SubtensorModule',
             call_function='remove_stake',
             call_params={'ammount_unstaked': amount.rao, 'hotkey': hotkey_id}
         )
-        extrinsic = await self.substrate.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
+        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.coldkey )
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def set_weights(
@@ -743,12 +746,12 @@ To run a local node (See: docs/running_a_validator.md) \n
                 If we did not wait for finalization / inclusion, the response is true.
         """
         await self.async_check_connection()
-        call = await self.substrate.compose_call(
+        call = await self.__interface.compose_call(
             call_module='SubtensorModule',
             call_function='set_weights',
             call_params = {'dests': destinations, 'weights': values}
         )
-        extrinsic = await self.substrate.create_signed_extrinsic( call = call, keypair = wallet.hotkey )
+        extrinsic = await self.__interface.create_signed_extrinsic( call = call, keypair = wallet.hotkey )
         return await self._submit_and_check_extrinsic ( extrinsic, wait_for_inclusion, wait_for_finalization, timeout )
 
     def get_balance(self, address: str) -> Balance:
@@ -774,7 +777,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 account balance
         """
         await self.async_check_connection()
-        result = await self.substrate.get_runtime_state(
+        result = await self.__interface.get_runtime_state(
             module='System',
             storage_function='Account',
             params=[address],
@@ -803,7 +806,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Current chain blocknumber.
         """
         await self.async_check_connection()
-        return await self.substrate.async_get_block_number(None)
+        return await self.__interface.async_get_block_number(None)
 
     def get_active(self) -> List[Tuple[str, int]]:
         r""" Returns a list of (public key, uid) pairs one for each active peer on chain.
@@ -822,7 +825,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of active peers.
         """
         await self.async_check_connection()
-        result = await self.substrate.iterate_map(
+        result = await self.__interface.iterate_map(
             module='SubtensorModule',
             storage_function='Active',
         )
@@ -845,7 +848,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of stake values.
         """
         await self.async_check_connection()
-        result = await self.substrate.iterate_map(
+        result = await self.__interface.iterate_map(
             module='SubtensorModule',
             storage_function='Stake',
         )
@@ -868,7 +871,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of last emit values.
         """
         await self.async_check_connection()
-        result = await self.substrate.iterate_map(
+        result = await self.__interface.iterate_map(
             module='SubtensorModule',
             storage_function='LastEmit'
         )
@@ -891,7 +894,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of weight val pairs.
         """
         await self.async_check_connection()
-        result = await self.substrate.iterate_map(
+        result = await self.__interface.iterate_map(
             module='SubtensorModule',
             storage_function='WeightVals'
         )
@@ -914,7 +917,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of weight uid pairs
         """
         await self.async_check_connection()
-        result = await self.substrate.iterate_map(
+        result = await self.__interface.iterate_map(
             module='SubtensorModule',
             storage_function='WeightUids'
         )
@@ -937,7 +940,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 List of neuron objects.
         """
         await self.async_check_connection()
-        neurons = await self.substrate.iterate_map(
+        neurons = await self.__interface.iterate_map(
             module='SubtensorModule',
             storage_function='Neurons'
         )
@@ -966,7 +969,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 uid of peer with hotkey equal to passed public key.
         """
         await self.async_check_connection()
-        result = await self.substrate.get_runtime_state(
+        result = await self.__interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='Active',
             params=[pubkey]
@@ -998,7 +1001,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Dict in list form containing metadata of associated uid.
         """
         await self.async_check_connection()
-        result = await self.substrate.get_runtime_state(
+        result = await self.__interface.get_runtime_state(
                 module='SubtensorModule',
                 storage_function='Neurons',
                 params=[uid]
@@ -1028,7 +1031,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Amount of staked token.
         """
         await self.async_check_connection()
-        stake = await self.substrate.get_runtime_state(
+        stake = await self.__interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='Stake',
             params = [uid]
@@ -1061,7 +1064,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Weight uids for passed uid.
         """
         await self.async_check_connection()
-        result = await self.substrate.get_runtime_state(
+        result = await self.__interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='WeightUids',
             params = [uid]
@@ -1091,7 +1094,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Weight vals for passed uid.
         """
         await self.async_check_connection()
-        result = await self.substrate.get_runtime_state(
+        result = await self.__interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='WeightVals',
             params = [uid]
@@ -1121,7 +1124,7 @@ To run a local node (See: docs/running_a_validator.md) \n
                 Last emit block numebr
         """
         await self.async_check_connection()
-        result = await self.substrate.get_runtime_state(
+        result = await self.__interface.get_runtime_state(
             module='SubtensorModule',
             storage_function='LastEmit',
             params = [uid]
